@@ -33,10 +33,10 @@ func (rw *NntpReaderWriter) writeDotLinesFromReader(r io.Reader) error {
 	return rw.writeLineFromString(".")
 }
 
-func (rw *NntpReaderWriter) writeDotLinesFromChan(ch chan []string, errChan chan error) error {
+func (rw *NntpReaderWriter) writeDotLinesFromChan(ch chan string, errChan chan error) error {
 	var err error
-	for lines := range ch {
-		err = rw.writeDotLinesFromStrings(lines)
+	for line := range ch {
+		err = rw.writeDotLineFromString(line)
 		if err != nil {
 			errChan <- err
 		}

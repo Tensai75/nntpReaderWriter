@@ -124,7 +124,7 @@ func (rw *NntpReaderWriter) DotLinesWriteCmdFromReader(cmd string, r io.Reader) 
 }
 
 // DotLinesWriteCmdFromChan sends a command and writes lines received from the provided channel as a dot-encoded block.
-func (rw *NntpReaderWriter) DotLinesWriteCmdFromChan(cmd string, ch chan []string, errChan chan error) (code int, msg string, err error) {
+func (rw *NntpReaderWriter) DotLinesWriteCmdFromChan(cmd string, ch chan string, errChan chan error) (code int, msg string, err error) {
 	return rw.dotLinesWriteCmd(cmd, func() error {
 		rw.lineScanner.Reset()
 		return rw.writeDotLinesFromChan(ch, errChan)
