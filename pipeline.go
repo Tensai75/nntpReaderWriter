@@ -6,61 +6,52 @@ import (
 )
 
 type pipeline struct {
-	id  atomic.Uint64
-	cmd sequencer
+	id   atomic.Uint64
+	mu   sync.Mutex
+	seq  uint
+	wait map[uint]chan struct{}
 }
 
+// Next returns the next pipeline id.
 func (p *pipeline) Next() uint {
 	return uint(p.id.Add(1) - 1)
 }
 
+// Start blocks until the pipeline is ready for the given id.
 func (p *pipeline) Start(id uint) {
-	p.cmd.Start(id)
-}
-
-func (p *pipeline) End(id uint) {
-	p.cmd.End(id)
-}
-
-type sequencer struct {
-	mu   sync.Mutex
-	id   uint
-	wait map[uint]chan struct{}
-}
-
-func (s *sequencer) Start(id uint) {
-	s.mu.Lock()
-	if s.id == id {
-		s.mu.Unlock()
+	p.mu.Lock()
+	if p.seq == id {
+		p.mu.Unlock()
 		return
 	}
 	c := make(chan struct{})
-	if s.wait == nil {
-		s.wait = make(map[uint]chan struct{})
+	if p.wait == nil {
+		p.wait = make(map[uint]chan struct{})
 	}
-	s.wait[id] = c
-	s.mu.Unlock()
+	p.wait[id] = c
+	p.mu.Unlock()
 	<-c
 }
 
-func (s *sequencer) End(id uint) {
-	s.mu.Lock()
-	if s.id != id {
-		s.mu.Unlock()
+// End signals that the pipeline for the given id is complete and unblocks the next in sequence.
+func (p *pipeline) End(id uint) {
+	p.mu.Lock()
+	if p.seq != id {
+		p.mu.Unlock()
 		// This should never happen if the pipeline is used correctly
 		// but we can panic here to catch any bugs in our usage of the pipeline.
-		panic("sequencer out of sync")
+		panic("pipeline out of sync")
 	}
 	id++
-	s.id = id
-	if s.wait == nil {
-		s.wait = make(map[uint]chan struct{})
+	p.seq = id
+	if p.wait == nil {
+		p.wait = make(map[uint]chan struct{})
 	}
-	c, ok := s.wait[id]
+	c, ok := p.wait[id]
 	if ok {
-		delete(s.wait, id)
+		delete(p.wait, id)
 	}
-	s.mu.Unlock()
+	p.mu.Unlock()
 	if ok {
 		close(c)
 	}

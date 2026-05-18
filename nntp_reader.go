@@ -6,18 +6,17 @@ import (
 )
 
 func (rw *NntpReaderWriter) readCodeResponseLine() (code int, msg string, err error) {
-	rw.lineScanner.Reset()
 	line, err := rw.readRawLine()
 	if err != nil {
 		return
 	}
 	if len(line) < 3 {
-		err = ErrInvalidResponseLine
+		err = errInvalidResponseLine()
 		return
 	}
 	b0, b1, b2 := line[0], line[1], line[2]
 	if b0 < '0' || b0 > '9' || b1 < '0' || b1 > '9' || b2 < '0' || b2 > '9' {
-		err = ErrInvalidResponseLine
+		err = errInvalidResponseLine()
 		return
 	}
 	code = int(b0-'0')*100 + int(b1-'0')*10 + int(b2-'0')
@@ -28,7 +27,6 @@ func (rw *NntpReaderWriter) readCodeResponseLine() (code int, msg string, err er
 }
 
 func (rw *NntpReaderWriter) readDotLinesAsStrings() (lines []string, err error) {
-	rw.lineScanner.Reset()
 	var line []byte
 	for {
 		line, err = rw.readDotLine()
@@ -43,7 +41,6 @@ func (rw *NntpReaderWriter) readDotLinesAsStrings() (lines []string, err error) 
 }
 
 func (rw *NntpReaderWriter) readDotLinesAsReader(done func()) (io.ReadCloser, error) {
-	rw.lineScanner.Reset()
 	return &dotLineReader{
 		rw:   rw,
 		done: done,
@@ -51,7 +48,6 @@ func (rw *NntpReaderWriter) readDotLinesAsReader(done func()) (io.ReadCloser, er
 }
 
 func (rw *NntpReaderWriter) readDotLinesAsBytesWithCallback(callback func([]byte) error) error {
-	rw.lineScanner.Reset()
 	var line []byte
 	var err error
 	for {
@@ -71,7 +67,6 @@ func (rw *NntpReaderWriter) readDotLinesAsBytesWithCallback(callback func([]byte
 }
 
 func (rw *NntpReaderWriter) readDotLinesAsStringsWithCallback(callback func(string) error) error {
-	rw.lineScanner.Reset()
 	var line []byte
 	var err error
 	for {

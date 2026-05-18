@@ -33,18 +33,15 @@ func (rw *NntpReaderWriter) writeDotLinesFromReader(r io.Reader) error {
 	return rw.writeLineFromString(".")
 }
 
-func (rw *NntpReaderWriter) writeDotLinesFromChan(ch chan string, errChan chan error) error {
+func (rw *NntpReaderWriter) writeDotLinesFromChan(ch chan string) error {
 	var err error
 	for line := range ch {
 		err = rw.writeDotLineFromString(line)
 		if err != nil {
-			errChan <- err
+			return err
 		}
 	}
 	err = rw.writeLineFromString(".")
-	if err != nil {
-		errChan <- err
-	}
 	return err
 }
 
@@ -78,6 +75,9 @@ func (rw *NntpReaderWriter) writeLineFromBytes(line []byte, prefixes ...string) 
 	rw.wbuf = append(rw.wbuf, line...)
 	rw.wbuf = append(rw.wbuf, '\r', '\n')
 	_, err := rw.writeBytes(rw.wbuf)
+	if err == io.EOF {
+		err = nil
+	}
 	return err
 }
 
@@ -89,6 +89,9 @@ func (rw *NntpReaderWriter) writeLineFromString(line string, prefixes ...string)
 	rw.wbuf = append(rw.wbuf, line...)
 	rw.wbuf = append(rw.wbuf, '\r', '\n')
 	_, err := rw.writeBytes(rw.wbuf)
+	if err == io.EOF {
+		err = nil
+	}
 	return err
 }
 
@@ -101,26 +104,26 @@ func (rw *NntpReaderWriter) writeBytes(p []byte) (n int, err error) {
 
 func checkStringLineForInvalidChars(line string) error {
 	if strings.Contains(line, "\n") {
-		return ErrInvalidWriteline("\\n")
+		return errInvalidWriteLine("\\n")
 	}
 	if strings.Contains(line, "\r") {
-		return ErrInvalidWriteline("\\r")
+		return errInvalidWriteLine("\\r")
 	}
 	if strings.Contains(line, "\x00") {
-		return ErrInvalidWriteline("\\x00")
+		return errInvalidWriteLine("\\x00")
 	}
 	return nil
 }
 
 func checkBytesLineForInvalidChars(line []byte) error {
 	if bytes.Contains(line, []byte{'\n'}) {
-		return ErrInvalidWriteline("\\n")
+		return errInvalidWriteLine("\\n")
 	}
 	if bytes.Contains(line, []byte{'\r'}) {
-		return ErrInvalidWriteline("\\r")
+		return errInvalidWriteLine("\\r")
 	}
 	if bytes.Contains(line, []byte{'\x00'}) {
-		return ErrInvalidWriteline("\\x00")
+		return errInvalidWriteLine("\\x00")
 	}
 	return nil
 }

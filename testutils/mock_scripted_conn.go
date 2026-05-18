@@ -1,4 +1,6 @@
-package mock
+// Package mockScriptedConn provides a mock net.Conn implementation for testing protocol interactions with scripted exchanges.
+// It allows defining a sequence of expected writes and corresponding responses, as well as simulating timeouts and connection closure.
+package mockScriptedConn
 
 import (
 	"bytes"
@@ -30,6 +32,7 @@ type ScriptedConn struct {
 	writeDeadline time.Time
 }
 
+// NewScriptedConn creates a new ScriptedConn with the given script steps.
 func NewScriptedConn(steps []ScriptStep) *ScriptedConn {
 	return &ScriptedConn{
 		steps:   steps,
@@ -37,6 +40,27 @@ func NewScriptedConn(steps []ScriptStep) *ScriptedConn {
 	}
 }
 
+// TimeoutError is a custom error type that implements net.Error for simulating timeouts in the ScriptedConn.
+type TimeoutError struct {
+	Op  string
+	Net string
+	Err error
+}
+
+// Timeout returns true to indicate that this error is a timeout.
+func (to *TimeoutError) Timeout() bool { return true }
+
+// Temporary returns true to indicate that this error is temporary.
+func (to *TimeoutError) Temporary() bool { return true }
+
+// Error returns a string representation of the TimeoutError, including the operation, network, and underlying error message.
+func (to *TimeoutError) Error() string { return to.Op + ": " + to.Net + ": " + to.Err.Error() }
+
+// A single instance of TimeoutError to return for all timeout scenarios in the ScriptedConn.
+var timeoutError = &TimeoutError{Op: "read", Net: "mock", Err: errors.New("i/o timeout")}
+
+// Read implements the net.Conn Read method, providing scripted responses
+// and simulating timeouts as defined in the ScriptStep.
 func (c *ScriptedConn) Read(b []byte) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -44,12 +68,12 @@ func (c *ScriptedConn) Read(b []byte) (int, error) {
 		return 0, io.EOF
 	}
 	if !c.readDeadline.IsZero() && time.Now().After(c.readDeadline) {
-		return 0, &net.OpError{Op: "read", Net: "mock", Err: errors.New("i/o timeout")}
+		return 0, timeoutError
 	}
 	for c.readBuf.Len() == 0 && c.stepIdx < len(c.steps) {
 		step := c.steps[c.stepIdx]
 		if step.ReadTimeout {
-			return 0, &net.OpError{Op: "read", Net: "mock", Err: errors.New("i/o timeout (step)")}
+			return 0, timeoutError
 		}
 		if !c.writeOk {
 			// Wait for the expected write before providing a response
@@ -65,6 +89,8 @@ func (c *ScriptedConn) Read(b []byte) (int, error) {
 	return c.readBuf.Read(b)
 }
 
+// Write implements the net.Conn Write method, checking against the expected writes in the ScriptStep
+// and simulating timeouts as defined in the ScriptStep.
 func (c *ScriptedConn) Write(b []byte) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -72,19 +98,18 @@ func (c *ScriptedConn) Write(b []byte) (int, error) {
 		return 0, io.ErrClosedPipe
 	}
 	if !c.writeDeadline.IsZero() && time.Now().After(c.writeDeadline) {
-		return 0, &net.OpError{Op: "write", Net: "mock", Err: errors.New("i/o timeout")}
+		return 0, timeoutError
 	}
 	if c.stepIdx >= len(c.steps) {
 		return 0, errors.New("unexpected write: no more script steps")
 	}
 	step := c.steps[c.stepIdx]
 	if step.WriteTimeout {
-		return 0, &net.OpError{Op: "write", Net: "mock", Err: errors.New("i/o timeout (step)")}
+		return 0, timeoutError
 	}
 	if step.ExpectedWrite != nil && !bytes.Equal(b, step.ExpectedWrite) {
 		return 0, errors.New("unexpected write: did not match expected")
 	}
-	// fmt.Printf("Expected write: %q\nActual write:   %q\n", step.ExpectedWrite, b)
 	if step.AwaitNextWrite {
 		c.stepIdx++
 		return len(b), nil
@@ -93,9 +118,16 @@ func (c *ScriptedConn) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func (c *ScriptedConn) Close() error         { c.closed = true; return nil }
-func (c *ScriptedConn) LocalAddr() net.Addr  { return nil }
+// Close implements the net.Conn Close method, marking the connection as closed.
+func (c *ScriptedConn) Close() error { c.closed = true; return nil }
+
+// LocalAddr returns nil as this is a mock connection without a real local address.
+func (c *ScriptedConn) LocalAddr() net.Addr { return nil }
+
+// RemoteAddr returns nil as this is a mock connection without a real remote address.
 func (c *ScriptedConn) RemoteAddr() net.Addr { return nil }
+
+// SetDeadline sets both read and write deadlines for the connection.
 func (c *ScriptedConn) SetDeadline(t time.Time) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -103,12 +135,16 @@ func (c *ScriptedConn) SetDeadline(t time.Time) error {
 	c.writeDeadline = t
 	return nil
 }
+
+// SetReadDeadline sets the read deadline for the connection.
 func (c *ScriptedConn) SetReadDeadline(t time.Time) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.readDeadline = t
 	return nil
 }
+
+// SetWriteDeadline sets the write deadline for the connection.
 func (c *ScriptedConn) SetWriteDeadline(t time.Time) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

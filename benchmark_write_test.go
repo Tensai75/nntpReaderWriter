@@ -3,37 +3,26 @@ package nntpReaderWriter
 import (
 	"bufio"
 	"bytes"
+	"io"
 	"net/textproto"
 	"testing"
 
-	mock "github.com/Tensai75/nntpReaderWriter/testutils"
+	mockScriptedConn "github.com/Tensai75/nntpReaderWriter/testutils"
+)
+
+const (
+	writeLines   = 16384
+	writeLineLen = 128
 )
 
 func BenchmarkWriteLinesFromReader(b *testing.B) {
-	const (
-		lines   = 16384
-		lineLen = 128
-	)
-
-	b.SetBytes(int64(lines * lineLen))
-
-	// Prepare the scripted response and mock once
-	var linesToWrite bytes.Buffer
-	var steps []mock.ScriptStep
-	line := bytes.Repeat([]byte("X"), lineLen)
-	for range lines {
-		linesToWrite.Write(line)
-		linesToWrite.Write([]byte{'\n'})
-		steps = append(steps, mock.ScriptStep{AwaitNextWrite: true})
-	}
-	steps = append(steps, mock.ScriptStep{})
-
+	_, bytesToWrite, steps := prepareBenchmark(false)
+	reader := bytes.NewReader(bytesToWrite)
+	b.SetBytes(int64(writeLines * writeLineLen))
 	for b.Loop() {
-		mock := mock.NewScriptedConn(steps)
-		opts := NntpReaderWriterOptions{}
-		client := NewNntpReaderWriter(mock, opts)
-
-		err := client.writeDotLinesFromReader(&linesToWrite)
+		client := NewNntpReaderWriter(mockScriptedConn.NewScriptedConn(steps), NntpReaderWriterOptions{})
+		reader.Reset(bytesToWrite)
+		err := client.writeDotLinesFromReader(reader)
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)
 		}
@@ -41,29 +30,15 @@ func BenchmarkWriteLinesFromReader(b *testing.B) {
 }
 
 func BenchmarkWriteLinesFromReader_Textproto(b *testing.B) {
-	const (
-		lines   = 16384
-		lineLen = 128
-	)
-
-	b.SetBytes(int64(lines * lineLen))
-
-	// Prepare the scripted response and mock once
-	var linesToWrite bytes.Buffer
-	var steps []mock.ScriptStep
-	line := bytes.Repeat([]byte("X"), lineLen)
-	for range lines {
-		linesToWrite.Write(line)
-		linesToWrite.Write([]byte{'\n'})
-		steps = append(steps, mock.ScriptStep{AwaitNextWrite: true})
-	}
-	steps = append(steps, mock.ScriptStep{})
-
+	_, bytesToWrite, steps := prepareBenchmark(true)
+	reader := bytes.NewReader(bytesToWrite)
+	b.SetBytes(int64(writeLines * writeLineLen))
 	for b.Loop() {
-		mock := mock.NewScriptedConn(steps)
-		tw := textproto.NewWriter(bufio.NewWriter(mock))
+		conn := mockScriptedConn.NewScriptedConn(steps)
+		tw := textproto.NewWriter(bufio.NewWriter(conn))
+		reader.Reset(bytesToWrite)
 		writer := tw.DotWriter()
-		_, err := writer.Write(linesToWrite.Bytes())
+		_, err := io.Copy(writer, reader)
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)
 		}
@@ -72,28 +47,10 @@ func BenchmarkWriteLinesFromReader_Textproto(b *testing.B) {
 }
 
 func BenchmarkWriteLinesFromStrings(b *testing.B) {
-	const (
-		lines   = 16384
-		lineLen = 128
-	)
-
-	b.SetBytes(int64(lines * lineLen))
-
-	// Prepare the scripted response and mock once
-	var linesToWrite []string
-	var steps []mock.ScriptStep
-	line := bytes.Repeat([]byte("X"), lineLen)
-	for range lines {
-		linesToWrite = append(linesToWrite, string(line))
-		steps = append(steps, mock.ScriptStep{AwaitNextWrite: true})
-	}
-	steps = append(steps, mock.ScriptStep{})
-
+	linesToWrite, _, steps := prepareBenchmark(false)
+	b.SetBytes(int64(writeLines * writeLineLen))
 	for b.Loop() {
-		mock := mock.NewScriptedConn(steps)
-		opts := NntpReaderWriterOptions{}
-		client := NewNntpReaderWriter(mock, opts)
-
+		client := NewNntpReaderWriter(mockScriptedConn.NewScriptedConn(steps), NntpReaderWriterOptions{})
 		err := client.writeDotLinesFromStrings(linesToWrite)
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)
@@ -102,26 +59,11 @@ func BenchmarkWriteLinesFromStrings(b *testing.B) {
 }
 
 func BenchmarkWriteLinesFromStrings_Textproto(b *testing.B) {
-	const (
-		lines   = 16384
-		lineLen = 128
-	)
-
-	b.SetBytes(int64(lines * lineLen))
-
-	// Prepare the scripted response and mock once
-	var linesToWrite []string
-	var steps []mock.ScriptStep
-	line := bytes.Repeat([]byte("X"), lineLen)
-	for range lines {
-		linesToWrite = append(linesToWrite, string(line))
-		steps = append(steps, mock.ScriptStep{AwaitNextWrite: true})
-	}
-	steps = append(steps, mock.ScriptStep{})
-
+	linesToWrite, _, steps := prepareBenchmark(true)
+	b.SetBytes(int64(writeLines * writeLineLen))
 	for b.Loop() {
-		mock := mock.NewScriptedConn(steps)
-		tw := textproto.NewWriter(bufio.NewWriter(mock))
+		conn := mockScriptedConn.NewScriptedConn(steps)
+		tw := textproto.NewWriter(bufio.NewWriter(conn))
 		writer := tw.DotWriter()
 		for _, line := range linesToWrite {
 			_, err := writer.Write([]byte(line))
@@ -131,4 +73,32 @@ func BenchmarkWriteLinesFromStrings_Textproto(b *testing.B) {
 		}
 		writer.Close()
 	}
+}
+
+func prepareBenchmark(textproto bool) (linesToWrite []string, bytesToWrite []byte, steps []mockScriptedConn.ScriptStep) {
+	line := bytes.Repeat([]byte("X"), writeLineLen)
+	var expectedWrite []byte
+	for range writeLines {
+		linesToWrite = append(linesToWrite, string(line))
+		bytesToWrite = append(bytesToWrite, line...)
+		bytesToWrite = append(bytesToWrite, '\n')
+		if textproto {
+			expectedWrite = nil
+		} else {
+			expectedWrite = append(line, '\r', '\n')
+		}
+		steps = append(steps, mockScriptedConn.ScriptStep{
+			ExpectedWrite:  expectedWrite,
+			AwaitNextWrite: true,
+		})
+	}
+	if textproto {
+		expectedWrite = nil
+	} else {
+		expectedWrite = []byte(".\r\n")
+	}
+	steps = append(steps, mockScriptedConn.ScriptStep{
+		ExpectedWrite: []byte(".\r\n"),
+	})
+	return
 }

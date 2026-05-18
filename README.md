@@ -42,17 +42,17 @@ func main() {
         ReadTimeout:   10 * time.Second,
         WriteTimeout:  10 * time.Second,
     }
-    client := nntpReaderWriter.NewNntpReaderWriter(conn, opts)
+    nntpRW := nntpReaderWriter.NewNntpReaderWriter(conn, opts)
 
     // Example: Issue a simple NNTP command
-    code, msg, err := client.SingleResponseLineCmd("MODE READER")
+    code, msg, err := nntpRW.SingleResponseLineCmd("MODE READER")
     if err != nil {
         log.Fatalf("NNTP error: %v", err)
     }
     fmt.Printf("Response: %d %s\n", code, msg)
 
     // Example: Read multi-line response as strings
-    code, msg, lines, err := client.DotLinesReadCmdAsStrings("LIST")
+    code, msg, lines, err := nntpRW.DotLinesReadCmdAsStrings("LIST")
     if err != nil {
         log.Fatalf("LIST error: %v", err)
     }
@@ -61,7 +61,7 @@ func main() {
     // Example: Write multi-line data
     // Line breaks and single dot end line are added by nntpReaderWriter
     postLines := []string{"From: test@example.com", "Subject: Test", "", "This is a test."}
-    code, msg, err = client.DotLinesWriteCmdFromStrings("POST", postLines)
+    code, msg, err = nntpRW.DotLinesWriteCmdFromStrings("POST", postLines)
     if err != nil {
         log.Fatalf("POST error: %v", err)
     }
@@ -70,20 +70,6 @@ func main() {
 ```
 
 See the [GoDoc](https://pkg.go.dev/github.com/Tensai75/nntpReaderWriter) for full API documentation.
-
-## Error Handling
-
-The package provides custom error types:
-
-- `NntpError` for server error responses (4xx/5xx)
-- `UnexpectedResponseCodeError` for syntactically valid but unexpected codes
-
-You can check for these using:
-
-```go
-if nntpReaderWriter.IsNntpError(err) { /* ... */ }
-if nntpReaderWriter.IsUnexpectedResponseCodeError(err) { /* ... */ }
-```
 
 ## License
 

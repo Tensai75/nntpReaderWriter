@@ -44,14 +44,12 @@ func (rw *NntpReaderWriter) SingleResponseLineCmd(cmd string) (code int, msg str
 	var id uint
 	id, code, msg, err = rw.startCmd(cmd)
 	if err != nil {
-		if code >= 300 && code < 400 {
-			err = nntpUnexpectedCodeError(code, msg)
-		}
-	}
-	if err != nil {
 		return
 	}
 	defer rw.pipeline.End(id)
+	if code >= 300 && code < 400 {
+		err = errUnexpectedResponseCodeError(code, msg)
+	}
 	return
 }
 
@@ -124,10 +122,9 @@ func (rw *NntpReaderWriter) DotLinesWriteCmdFromReader(cmd string, r io.Reader) 
 }
 
 // DotLinesWriteCmdFromChan sends a command and writes lines received from the provided channel as a dot-encoded block.
-func (rw *NntpReaderWriter) DotLinesWriteCmdFromChan(cmd string, ch chan string, errChan chan error) (code int, msg string, err error) {
+func (rw *NntpReaderWriter) DotLinesWriteCmdFromChan(cmd string, ch chan string) (code int, msg string, err error) {
 	return rw.dotLinesWriteCmd(cmd, func() error {
-		rw.lineScanner.Reset()
-		return rw.writeDotLinesFromChan(ch, errChan)
+		return rw.writeDotLinesFromChan(ch)
 	})
 }
 
@@ -136,6 +133,7 @@ func (rw *NntpReaderWriter) ReadCodeResponseLine() (code int, msg string, err er
 	id := rw.pipeline.Next()
 	rw.pipeline.Start(id)
 	defer rw.pipeline.End(id)
+	rw.lineScanner.Reset()
 	return rw.readCodeResponseLine()
 }
 
@@ -146,9 +144,10 @@ func (rw *NntpReaderWriter) startCmd(cmd string) (id uint, code int, msg string,
 		rw.pipeline.End(id)
 		return
 	}
+	rw.lineScanner.Reset()
 	code, msg, err = rw.readCodeResponseLine()
 	if err == nil && code >= 400 {
-		err = nntpError(code, msg)
+		err = errNntpError(code, msg)
 	}
 	if err != nil {
 		rw.pipeline.End(id)
@@ -164,16 +163,22 @@ func (rw *NntpReaderWriter) dotLinesWriteCmd(cmd string, write func() error) (co
 		return
 	}
 	defer rw.pipeline.End(id)
-	if code < 300 {
-		return code, msg, nntpUnexpectedCodeError(code, msg)
+	err = errNntpError(code, msg)
+	if err != nil {
+		return
 	}
-	if err = write(); err != nil {
+	if code < 300 {
+		return code, msg, errUnexpectedResponseCodeError(code, msg)
+	}
+	err = write()
+	if err != nil && err != io.EOF {
 		return 0, "", err
 	}
+	rw.lineScanner.Reset()
 	code, msg, err = rw.readCodeResponseLine()
 	if err != nil {
 		return
 	}
-	err = nntpError(code, msg)
+	err = errNntpError(code, msg)
 	return
 }

@@ -13,7 +13,7 @@ var writeDotLineTests = []TestScript{
 		Name: "Basic",
 		Steps: []TestStep{
 			{
-				ScriptStep:    mock.ScriptStep{ExpectedWrite: []byte("hello world\r\n")},
+				ScriptSteps:   []mock.ScriptStep{{ExpectedWrite: []byte("hello world\r\n")}},
 				WriteData:     []byte("hello world"),
 				ExpectedError: nil,
 			},
@@ -23,7 +23,7 @@ var writeDotLineTests = []TestScript{
 		Name: "UTF-8",
 		Steps: []TestStep{
 			{
-				ScriptStep:    mock.ScriptStep{ExpectedWrite: []byte("こんにちは世界\r\n")},
+				ScriptSteps:   []mock.ScriptStep{{ExpectedWrite: []byte("こんにちは世界\r\n")}},
 				WriteData:     []byte("こんにちは世界"),
 				ExpectedError: nil,
 			},
@@ -33,7 +33,7 @@ var writeDotLineTests = []TestScript{
 		Name: "VeryLongLine",
 		Steps: []TestStep{
 			{
-				ScriptStep:    mock.ScriptStep{ExpectedWrite: []byte(strings.Repeat("a", 70*1024) + "\r\n")},
+				ScriptSteps:   []mock.ScriptStep{{ExpectedWrite: []byte(strings.Repeat("a", 70*1024) + "\r\n")}},
 				WriteData:     []byte(strings.Repeat("a", 70*1024)),
 				ExpectedError: nil,
 			},
@@ -43,7 +43,7 @@ var writeDotLineTests = []TestScript{
 		Name: "EmptyLine",
 		Steps: []TestStep{
 			{
-				ScriptStep:    mock.ScriptStep{ExpectedWrite: []byte("\r\n")},
+				ScriptSteps:   []mock.ScriptStep{{ExpectedWrite: []byte("\r\n")}},
 				WriteData:     []byte(""),
 				ExpectedError: nil,
 			},
@@ -53,7 +53,7 @@ var writeDotLineTests = []TestScript{
 		Name: "DotPrefix",
 		Steps: []TestStep{
 			{
-				ScriptStep:    mock.ScriptStep{ExpectedWrite: []byte("..hello\r\n")},
+				ScriptSteps:   []mock.ScriptStep{{ExpectedWrite: []byte("..hello\r\n")}},
 				WriteData:     []byte(".hello"),
 				ExpectedError: nil,
 			},
@@ -63,7 +63,7 @@ var writeDotLineTests = []TestScript{
 		Name: "TwoDotsPrefix",
 		Steps: []TestStep{
 			{
-				ScriptStep:    mock.ScriptStep{ExpectedWrite: []byte("...hello\r\n")},
+				ScriptSteps:   []mock.ScriptStep{{ExpectedWrite: []byte("...hello\r\n")}},
 				WriteData:     []byte("..hello"),
 				ExpectedError: nil,
 			},
@@ -73,7 +73,7 @@ var writeDotLineTests = []TestScript{
 		Name: "DotOnlyLine",
 		Steps: []TestStep{
 			{
-				ScriptStep:    mock.ScriptStep{ExpectedWrite: []byte("..\r\n")},
+				ScriptSteps:   []mock.ScriptStep{{ExpectedWrite: []byte("..\r\n")}},
 				WriteData:     []byte("."),
 				ExpectedError: nil,
 			},
@@ -83,7 +83,7 @@ var writeDotLineTests = []TestScript{
 		Name: "LeadingSpace",
 		Steps: []TestStep{
 			{
-				ScriptStep:    mock.ScriptStep{ExpectedWrite: []byte(" hello\r\n")},
+				ScriptSteps:   []mock.ScriptStep{{ExpectedWrite: []byte(" hello\r\n")}},
 				WriteData:     []byte(" hello"),
 				ExpectedError: nil,
 			},
@@ -93,7 +93,7 @@ var writeDotLineTests = []TestScript{
 		Name: "TrailingSpace",
 		Steps: []TestStep{
 			{
-				ScriptStep:    mock.ScriptStep{ExpectedWrite: []byte("hello \r\n")},
+				ScriptSteps:   []mock.ScriptStep{{ExpectedWrite: []byte("hello \r\n")}},
 				WriteData:     []byte("hello "),
 				ExpectedError: nil,
 			},
@@ -103,7 +103,7 @@ var writeDotLineTests = []TestScript{
 		Name: "LeadingTab",
 		Steps: []TestStep{
 			{
-				ScriptStep:    mock.ScriptStep{ExpectedWrite: []byte("\thello\r\n")},
+				ScriptSteps:   []mock.ScriptStep{{ExpectedWrite: []byte("\thello\r\n")}},
 				WriteData:     []byte("\thello"),
 				ExpectedError: nil,
 			},
@@ -113,7 +113,7 @@ var writeDotLineTests = []TestScript{
 		Name: "TrailingTab",
 		Steps: []TestStep{
 			{
-				ScriptStep:    mock.ScriptStep{ExpectedWrite: []byte("hello\t\r\n")},
+				ScriptSteps:   []mock.ScriptStep{{ExpectedWrite: []byte("hello\t\r\n")}},
 				WriteData:     []byte("hello\t"),
 				ExpectedError: nil,
 			},
@@ -123,9 +123,9 @@ var writeDotLineTests = []TestScript{
 		Name: "LineWithNewline",
 		Steps: []TestStep{
 			{
-				ScriptStep:    mock.ScriptStep{ExpectedWrite: []byte("hello\nworld\r\n")},
+				ScriptSteps:   []mock.ScriptStep{{ExpectedWrite: []byte("hello\nworld\r\n")}},
 				WriteData:     []byte("hello\nworld"),
-				ExpectedError: ErrInvalidWriteline("\\n"),
+				ExpectedError: errInvalidWriteLine("\\n"),
 			},
 		},
 	},
@@ -133,9 +133,9 @@ var writeDotLineTests = []TestScript{
 		Name: "LineWithCarriageReturn",
 		Steps: []TestStep{
 			{
-				ScriptStep:    mock.ScriptStep{ExpectedWrite: []byte("hello\rworld\r\n")},
+				ScriptSteps:   []mock.ScriptStep{{ExpectedWrite: []byte("hello\rworld\r\n")}},
 				WriteData:     []byte("hello\rworld"),
-				ExpectedError: ErrInvalidWriteline("\\r"),
+				ExpectedError: errInvalidWriteLine("\\r"),
 			},
 		},
 	},
@@ -143,9 +143,9 @@ var writeDotLineTests = []TestScript{
 		Name: "LineWithNullByte",
 		Steps: []TestStep{
 			{
-				ScriptStep:    mock.ScriptStep{ExpectedWrite: []byte("hello\x00world\r\n")},
+				ScriptSteps:   []mock.ScriptStep{{ExpectedWrite: []byte("hello\x00world\r\n")}},
 				WriteData:     []byte("hello\x00world"),
-				ExpectedError: ErrInvalidWriteline("\\x00"),
+				ExpectedError: errInvalidWriteLine("\\x00"),
 			},
 		},
 	},
@@ -157,9 +157,7 @@ func TestWriteDotLineFromString(t *testing.T) {
 			for _, step := range test.Steps {
 				rw := NewTestReaderWriterWithTestScript(TestScript{Steps: []TestStep{step}}, NntpReaderWriterOptions{})
 				err := rw.writeDotLineFromString(string(step.WriteData))
-				if errorToString(err) != errorToString(step.ExpectedError) {
-					t.Errorf("writeDotLineFromString(%q) error = %v; want %v", step.WriteData, err, step.ExpectedError)
-				}
+				testError(t, err, step)
 			}
 		})
 	}
@@ -171,9 +169,7 @@ func TestWriteDotLineFromBytes(t *testing.T) {
 			for _, step := range test.Steps {
 				rw := NewTestReaderWriterWithTestScript(TestScript{Steps: []TestStep{step}}, NntpReaderWriterOptions{})
 				err := rw.writeDotLineFromBytes(step.WriteData)
-				if errorToString(err) != errorToString(step.ExpectedError) {
-					t.Errorf("writeDotLineFromBytes(%q) error = %v; want %v", step.WriteData, err, step.ExpectedError)
-				}
+				testError(t, err, step)
 			}
 		})
 	}
@@ -181,27 +177,40 @@ func TestWriteDotLineFromBytes(t *testing.T) {
 
 func TestWriteDotLinesFromStrings(t *testing.T) {
 	testScript, stringsToWrite, _ := prepareDotLinesTestScript()
-	rw := NewTestReaderWriterWithTestScript(testScript, NntpReaderWriterOptions{})
-	err := rw.writeDotLinesFromStrings(stringsToWrite)
-	if errorToString(err) != errorToString(testScript.Steps[0].ExpectedError) {
-		t.Errorf("writeDotLinesFromStrings error = %v; want %v", err, testScript.Steps[0].ExpectedError)
-	}
+	t.Run(testScript.Name, func(t *testing.T) {
+		for _, step := range testScript.Steps {
+			rw := NewTestReaderWriterWithTestScript(testScript, NntpReaderWriterOptions{})
+			err := rw.writeDotLinesFromStrings(stringsToWrite)
+			testError(t, err, step)
+		}
+	})
 }
 
 func TestWriteDotLinesFromReader(t *testing.T) {
 	testScript, _, bytesToWrite := prepareDotLinesTestScript()
-	rw := NewTestReaderWriterWithTestScript(testScript, NntpReaderWriterOptions{})
-	err := rw.writeDotLinesFromReader(bytes.NewReader(bytesToWrite))
-	if errorToString(err) != errorToString(testScript.Steps[0].ExpectedError) {
-		t.Errorf("writeDotLinesFromReader error = %v; want %v", err, testScript.Steps[0].ExpectedError)
-	}
+	t.Run(testScript.Name, func(t *testing.T) {
+		for _, step := range testScript.Steps {
+			rw := NewTestReaderWriterWithTestScript(testScript, NntpReaderWriterOptions{})
+			err := rw.writeDotLinesFromReader(bytes.NewReader(bytesToWrite))
+			testError(t, err, step)
+		}
+	})
 }
 
-func errorToString(err error) string {
-	if err == nil {
-		return "<nil>"
-	}
-	return err.Error()
+func TestWriteDotLinesFromChan(t *testing.T) {
+	testScript, stringsToWrite, _ := prepareDotLinesTestScript()
+	t.Run(testScript.Name, func(t *testing.T) {
+		for _, step := range testScript.Steps {
+			rw := NewTestReaderWriterWithTestScript(testScript, NntpReaderWriterOptions{})
+			ch := make(chan string, 100)
+			for _, line := range stringsToWrite {
+				ch <- line
+			}
+			close(ch)
+			err := rw.writeDotLinesFromChan(ch)
+			testError(t, err, step)
+		}
+	})
 }
 
 func prepareDotLinesTestScript() (testScript TestScript, stringsToWrite []string, bytesToWrite []byte) {
@@ -214,14 +223,14 @@ func prepareDotLinesTestScript() (testScript TestScript, stringsToWrite []string
 			stringsToWrite = append(stringsToWrite, string(step.WriteData))
 			bytesToWrite = append(bytesToWrite, append(step.WriteData, []byte("\n")...)...)
 			step := TestStep{
-				ScriptStep:    mock.ScriptStep{ExpectedWrite: step.ScriptStep.ExpectedWrite, AwaitNextWrite: true},
+				ScriptSteps:   []mock.ScriptStep{{ExpectedWrite: step.ScriptSteps[0].ExpectedWrite, AwaitNextWrite: true}},
 				ExpectedError: step.ExpectedError,
 			}
 			steps = append(steps, step)
 		}
 	}
 	steps = append(steps, TestStep{ // Final step for the dot line
-		ScriptStep:    mock.ScriptStep{ExpectedWrite: []byte(".\r\n")},
+		ScriptSteps:   []mock.ScriptStep{{ExpectedWrite: []byte(".\r\n")}},
 		ExpectedError: nil,
 	})
 	testScript = TestScript{
