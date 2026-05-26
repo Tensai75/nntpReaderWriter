@@ -1,77 +1,64 @@
 package nntpReaderWriter
 
 import (
-	"bufio"
 	"bytes"
-	"io"
-	"net/textproto"
 	"testing"
 
-	mockScriptedConn "github.com/Tensai75/nntpReaderWriter/testutils"
+	"github.com/Tensai75/nntpReaderWriter/mockScriptedConn"
 )
 
 const (
-	writeLines   = 16384
-	writeLineLen = 128
+	writeLines   = 100000
+	writeLineLen = 1024
 )
 
-func BenchmarkWriteLinesFromReader(b *testing.B) {
+func BenchmarkWriteLinesReader(b *testing.B) {
 	_, bytesToWrite, steps := prepareBenchmark(false)
 	reader := bytes.NewReader(bytesToWrite)
 	b.SetBytes(int64(writeLines * writeLineLen))
 	for b.Loop() {
+		b.StopTimer()
 		client := NewNntpReaderWriter(mockScriptedConn.NewScriptedConn(steps), NntpReaderWriterOptions{})
 		reader.Reset(bytesToWrite)
-		err := client.writeDotLinesFromReader(reader)
+		b.StartTimer()
+		err := client.WriteDotLinesReader(reader)
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)
 		}
 	}
 }
 
-func BenchmarkWriteLinesFromReader_Textproto(b *testing.B) {
-	_, bytesToWrite, steps := prepareBenchmark(true)
-	reader := bytes.NewReader(bytesToWrite)
-	b.SetBytes(int64(writeLines * writeLineLen))
-	for b.Loop() {
-		conn := mockScriptedConn.NewScriptedConn(steps)
-		tw := textproto.NewWriter(bufio.NewWriter(conn))
-		reader.Reset(bytesToWrite)
-		writer := tw.DotWriter()
-		_, err := io.Copy(writer, reader)
-		if err != nil {
-			b.Fatalf("unexpected error: %v", err)
-		}
-		writer.Close()
-	}
-}
-
-func BenchmarkWriteLinesFromStrings(b *testing.B) {
+func BenchmarkWriteLinesStrings(b *testing.B) {
 	linesToWrite, _, steps := prepareBenchmark(false)
 	b.SetBytes(int64(writeLines * writeLineLen))
 	for b.Loop() {
+		b.StopTimer()
 		client := NewNntpReaderWriter(mockScriptedConn.NewScriptedConn(steps), NntpReaderWriterOptions{})
-		err := client.writeDotLinesFromStrings(linesToWrite)
+		b.StartTimer()
+		err := client.WriteDotLines(linesToWrite)
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)
 		}
 	}
 }
 
-func BenchmarkWriteLinesFromStrings_Textproto(b *testing.B) {
-	linesToWrite, _, steps := prepareBenchmark(true)
+func BenchmarkWriteLinesChannel(b *testing.B) {
+	linesToWrite, _, steps := prepareBenchmark(false)
 	b.SetBytes(int64(writeLines * writeLineLen))
 	for b.Loop() {
-		conn := mockScriptedConn.NewScriptedConn(steps)
-		tw := textproto.NewWriter(bufio.NewWriter(conn))
-		writer := tw.DotWriter()
-		for _, line := range linesToWrite {
-			_, err := writer.Write([]byte(line))
-			if err != nil {
-				b.Fatalf("unexpected error: %v", err)
-			}
+		b.StopTimer()
+		lchan := make(chan string, len(linesToWrite))
+		var line string
+		for _, line = range linesToWrite {
+			lchan <- line
 		}
-		writer.Close()
+		close(lchan)
+		client := NewNntpReaderWriter(mockScriptedConn.NewScriptedConn(steps), NntpReaderWriterOptions{})
+		b.StartTimer()
+		err := client.WriteDotLinesChannel(lchan)
+		if err != nil {
+			b.Fatalf("unexpected error: %v", err)
+		}
 	}
 }
 

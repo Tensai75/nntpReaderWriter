@@ -5,6 +5,7 @@ package mockScriptedConn
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -30,6 +31,7 @@ type ScriptedConn struct {
 	writeOk       bool // true if the expected write for this step has been received
 	readDeadline  time.Time
 	writeDeadline time.Time
+	writenLines   int
 }
 
 // NewScriptedConn creates a new ScriptedConn with the given script steps.
@@ -100,6 +102,7 @@ func (c *ScriptedConn) Write(b []byte) (int, error) {
 	if !c.writeDeadline.IsZero() && time.Now().After(c.writeDeadline) {
 		return 0, timeoutError
 	}
+	c.writenLines++
 	if c.stepIdx >= len(c.steps) {
 		return 0, errors.New("unexpected write: no more script steps")
 	}
@@ -108,6 +111,7 @@ func (c *ScriptedConn) Write(b []byte) (int, error) {
 		return 0, timeoutError
 	}
 	if step.ExpectedWrite != nil && !bytes.Equal(b, step.ExpectedWrite) {
+		fmt.Printf("Line %d expected write: %q, got: %q\n", c.writenLines, step.ExpectedWrite, b)
 		return 0, errors.New("unexpected write: did not match expected")
 	}
 	if step.AwaitNextWrite {

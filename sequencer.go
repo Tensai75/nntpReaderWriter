@@ -5,20 +5,20 @@ import (
 	"sync/atomic"
 )
 
-type pipeline struct {
+type sequencer struct {
 	id   atomic.Uint64
 	mu   sync.Mutex
 	seq  uint
 	wait map[uint]chan struct{}
 }
 
-// Next returns the next pipeline id.
-func (p *pipeline) Next() uint {
+// Next returns the next sequencer id.
+func (p *sequencer) Next() uint {
 	return uint(p.id.Add(1) - 1)
 }
 
-// Start blocks until the pipeline is ready for the given id.
-func (p *pipeline) Start(id uint) {
+// Start blocks until the sequencer is ready for the given id.
+func (p *sequencer) Start(id uint) {
 	p.mu.Lock()
 	if p.seq == id {
 		p.mu.Unlock()
@@ -33,14 +33,14 @@ func (p *pipeline) Start(id uint) {
 	<-c
 }
 
-// End signals that the pipeline for the given id is complete and unblocks the next in sequence.
-func (p *pipeline) End(id uint) {
+// End signals that the sequencer for the given id is complete and unblocks the next in sequence.
+func (p *sequencer) End(id uint) {
 	p.mu.Lock()
 	if p.seq != id {
 		p.mu.Unlock()
-		// This should never happen if the pipeline is used correctly
-		// but we can panic here to catch any bugs in our usage of the pipeline.
-		panic("pipeline out of sync")
+		// This should never happen if the sequencer is used correctly
+		// but we can panic here to catch any bugs in our usage of the sequencer.
+		panic("sequencer out of sync")
 	}
 	id++
 	p.seq = id

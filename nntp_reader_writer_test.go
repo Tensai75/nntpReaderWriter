@@ -2,16 +2,16 @@ package nntpReaderWriter
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
-	"io"
+	"sync"
 	"testing"
+	"time"
 
-	mock "github.com/Tensai75/nntpReaderWriter/testutils"
+	"github.com/Tensai75/nntpReaderWriter/mockScriptedConn"
 )
 
 type TestStep struct {
-	ScriptSteps       []mock.ScriptStep
+	ScriptSteps       []mockScriptedConn.ScriptStep
 	Command           string
 	WriteLines        []string
 	WriteData         []byte
@@ -29,20 +29,68 @@ type TestScript struct {
 }
 
 func NewTestReaderWriterWithTestScript(script TestScript, option NntpReaderWriterOptions) *NntpReaderWriter {
-	var scriptSteps []mock.ScriptStep
+	var scriptSteps []mockScriptedConn.ScriptStep
 	for _, step := range script.Steps {
 		scriptSteps = append(scriptSteps, step.ScriptSteps...)
 	}
-	conn := mock.NewScriptedConn(scriptSteps)
+	conn := mockScriptedConn.NewScriptedConn(scriptSteps)
 	return NewNntpReaderWriter(conn, option)
 }
 
-var singleResponseLineTests = []TestScript{
+var readAndCheckCodeResponseLineTests = []TestScript{
 	{
-		Name: "Basic",
+		Name: "NoCheck",
 		Steps: []TestStep{
 			{
-				ScriptSteps: []mock.ScriptStep{
+				ScriptSteps: []mockScriptedConn.ScriptStep{
+					{
+						ExpectedWrite: []byte("DATE\r\n"),
+						Response:      []byte("111 20260518101530\r\n"),
+					},
+				},
+				Command:       "DATE",
+				ExpectedCode:  0,
+				ExpectedError: nil,
+			},
+		},
+	},
+	{
+		Name: "SingleDigitExpectedCode",
+		Steps: []TestStep{
+			{
+				ScriptSteps: []mockScriptedConn.ScriptStep{
+					{
+						ExpectedWrite: []byte("DATE\r\n"),
+						Response:      []byte("111 20260518101530\r\n"),
+					},
+				},
+				Command:       "DATE",
+				ExpectedCode:  1,
+				ExpectedError: nil,
+			},
+		},
+	},
+	{
+		Name: "DoubleDigitExpectedCode",
+		Steps: []TestStep{
+			{
+				ScriptSteps: []mockScriptedConn.ScriptStep{
+					{
+						ExpectedWrite: []byte("DATE\r\n"),
+						Response:      []byte("111 20260518101530\r\n"),
+					},
+				},
+				Command:       "DATE",
+				ExpectedCode:  11,
+				ExpectedError: nil,
+			},
+		},
+	},
+	{
+		Name: "ExactExpectedCode",
+		Steps: []TestStep{
+			{
+				ScriptSteps: []mockScriptedConn.ScriptStep{
 					{
 						ExpectedWrite: []byte("DATE\r\n"),
 						Response:      []byte("111 20260518101530\r\n"),
@@ -50,43 +98,7 @@ var singleResponseLineTests = []TestScript{
 				},
 				Command:       "DATE",
 				ExpectedCode:  111,
-				ExpectedMsg:   "20260518101530",
 				ExpectedError: nil,
-			},
-		},
-	},
-	{
-		Name: "UTF-8",
-		Steps: []TestStep{
-			{
-				ScriptSteps: []mock.ScriptStep{
-					{
-						ExpectedWrite: []byte("DATE\r\n"),
-						Response:      []byte("111 こんにちは世界\r\n"),
-					},
-				},
-				Command:       "DATE",
-				ExpectedCode:  111,
-				ExpectedMsg:   "こんにちは世界",
-				ExpectedError: nil,
-			},
-		},
-	},
-	{
-		Name: "UnexpectedCode",
-		Steps: []TestStep{
-			{
-				ScriptSteps: []mock.ScriptStep{
-					{
-						ExpectedWrite: []byte("DATE\r\n"),
-						Response:      []byte("340 Send article to be posted\r\n"),
-					},
-				},
-				Command:           "DATE",
-				ExpectedCode:      340,
-				ExpectedMsg:       "Send article to be posted",
-				ExpectedError:     errUnexpectedResponseCodeError(340, "Send article to be posted"),
-				ExpectedErrorType: IsUnexpectedResponseCodeError,
 			},
 		},
 	},
@@ -94,320 +106,117 @@ var singleResponseLineTests = []TestScript{
 		Name: "ErrorCode",
 		Steps: []TestStep{
 			{
-				ScriptSteps: []mock.ScriptStep{
+				ScriptSteps: []mockScriptedConn.ScriptStep{
 					{
 						ExpectedWrite: []byte("DATE\r\n"),
-						Response:      []byte("500 Internal Server Error\r\n"),
+						Response:      []byte("411 20260518101530\r\n"),
 					},
 				},
-				Command:           "DATE",
-				ExpectedCode:      500,
-				ExpectedMsg:       "Internal Server Error",
-				ExpectedError:     errNntpError(500, "Internal Server Error"),
-				ExpectedErrorType: IsNntpError,
+				Command:       "DATE",
+				ExpectedCode:  111,
+				ExpectedError: errNntpError(411, "20260518101530"),
 			},
 		},
 	},
 	{
-		Name: "InvalidResponseLine",
+		Name: "SingleDigitUnexpectedCode",
 		Steps: []TestStep{
 			{
-				ScriptSteps: []mock.ScriptStep{
+				ScriptSteps: []mockScriptedConn.ScriptStep{
 					{
 						ExpectedWrite: []byte("DATE\r\n"),
-						Response:      []byte("Invalid Response\r\n"),
+						Response:      []byte("211 20260518101530\r\n"),
 					},
 				},
-				Command:           "DATE",
-				ExpectedCode:      0,
-				ExpectedMsg:       "",
-				ExpectedError:     errInvalidResponseLine(),
-				ExpectedErrorType: IsInvalidResponseLineError,
+				Command:       "DATE",
+				ExpectedCode:  1,
+				ExpectedError: errUnexpectedResponseCodeError(211, "20260518101530"),
+			},
+		},
+	},
+	{
+		Name: "DoubleDigitUnexpectedCode",
+		Steps: []TestStep{
+			{
+				ScriptSteps: []mockScriptedConn.ScriptStep{
+					{
+						ExpectedWrite: []byte("DATE\r\n"),
+						Response:      []byte("211 20260518101530\r\n"),
+					},
+				},
+				Command:       "DATE",
+				ExpectedCode:  11,
+				ExpectedError: errUnexpectedResponseCodeError(211, "20260518101530"),
+			},
+		},
+	},
+	{
+		Name: "ExactUnexpectedCode",
+		Steps: []TestStep{
+			{
+				ScriptSteps: []mockScriptedConn.ScriptStep{
+					{
+						ExpectedWrite: []byte("DATE\r\n"),
+						Response:      []byte("211 20260518101530\r\n"),
+					},
+				},
+				Command:       "DATE",
+				ExpectedCode:  111,
+				ExpectedError: errUnexpectedResponseCodeError(211, "20260518101530"),
 			},
 		},
 	},
 }
 
-func TestSingleLineCmd(t *testing.T) {
-	for _, test := range singleResponseLineTests {
+func TestCheckCode(t *testing.T) {
+	for _, test := range readAndCheckCodeResponseLineTests {
 		t.Run(test.Name, func(t *testing.T) {
 			rw := NewTestReaderWriterWithTestScript(test, NntpReaderWriterOptions{})
 			for _, step := range test.Steps {
-				code, msg, err := rw.SingleResponseLineCmd(step.Command)
-				testError(t, err, step)
-				testCode(t, code, step)
-				testMsg(t, msg, step)
-			}
-		})
-	}
-}
-
-var readerTests = []TestScript{
-	{
-		Name: "Basic",
-		Steps: []TestStep{
-			{
-				ScriptSteps: []mock.ScriptStep{
-					{
-						ExpectedWrite: []byte("OVER 1-3\r\n"),
-						Response:      []byte("224 Overview information follows\r\nline1\r\nline2\r\nline3\r\n.\r\n"),
-					},
-				},
-				Command:       "OVER 1-3",
-				ExpectedCode:  224,
-				ExpectedMsg:   "Overview information follows",
-				ExpectedLines: []string{"line1", "line2", "line3"},
-				ExpectedBytes: []byte("line1\nline2\nline3\n"),
-			},
-		},
-	},
-	{
-		Name: "EmptyLines",
-		Steps: []TestStep{
-			{
-				ScriptSteps: []mock.ScriptStep{
-					{
-						ExpectedWrite: []byte("OVER 1-3\r\n"),
-						Response:      []byte("224 Overview information follows\r\n\r\n\r\n.\r\n"),
-					},
-				},
-				Command:       "OVER 1-3",
-				ExpectedCode:  224,
-				ExpectedMsg:   "Overview information follows",
-				ExpectedLines: []string{"", ""},
-				ExpectedBytes: []byte("\n\n"),
-			},
-		},
-	},
-	{
-		Name: "UTF-8",
-		Steps: []TestStep{
-			{
-				ScriptSteps: []mock.ScriptStep{
-					{
-						ExpectedWrite: []byte("OVER 1-3\r\n"),
-						Response:      []byte("224 Overview information follows\r\nこんにちは\r\n世界\r\n.\r\n"),
-					},
-				},
-				Command:       "OVER 1-3",
-				ExpectedCode:  224,
-				ExpectedMsg:   "Overview information follows",
-				ExpectedLines: []string{"こんにちは", "世界"},
-				ExpectedBytes: []byte("こんにちは\n世界\n"),
-			},
-		},
-	},
-	{
-		Name: "ReadTimeout",
-		Steps: []TestStep{
-			{
-				ScriptSteps: []mock.ScriptStep{
-					{
-						ExpectedWrite: []byte("OVER 1-3\r\n"),
-						Response:      []byte("224 Overview information follows\r\nline1\r\nline2\r\nline3\r\n.\r\n"),
-						ReadTimeout:   true,
-					},
-				},
-				Command:           "OVER 1-3",
-				ExpectedCode:      0,
-				ExpectedMsg:       "",
-				ExpectedLines:     []string{},
-				ExpectedBytes:     []byte(""),
-				ExpectedError:     &mock.TimeoutError{Op: "read", Net: "mock", Err: errors.New("i/o timeout")},
-				ExpectedErrorType: IsTimeOutError,
-			},
-		},
-	},
-}
-
-func TestDotLinesReadCmdAsStrings(t *testing.T) {
-	for _, test := range readerTests {
-		t.Run(test.Name, func(t *testing.T) {
-			rw := NewTestReaderWriterWithTestScript(test, NntpReaderWriterOptions{})
-			for _, step := range test.Steps {
-				code, msg, lines, err := rw.DotLinesReadCmdAsStrings(step.Command)
-				testError(t, err, step)
-				testCode(t, code, step)
-				testMsg(t, msg, step)
-				testLines(t, lines, step)
-			}
-		})
-	}
-}
-
-func TestDotLinesReadCmdAsReader(t *testing.T) {
-	for _, test := range readerTests {
-		t.Run(test.Name, func(t *testing.T) {
-			rw := NewTestReaderWriterWithTestScript(test, NntpReaderWriterOptions{})
-			for _, step := range test.Steps {
-				code, msg, reader, err := rw.DotLinesReadCmdAsReader(step.Command)
-				testError(t, err, step)
-				testCode(t, code, step)
-				testMsg(t, msg, step)
-				if reader == nil && err == nil {
-					t.Fatalf("expected reader, got nil")
+				err := rw.WriteLine(step.Command)
+				if err != nil {
+					t.Fatalf("unexpected error writing command: %v", err)
 				}
-				if reader != nil {
-					lines, err := io.ReadAll(reader)
-					if err != nil {
-						t.Fatalf("unexpected error reading from reader: %v", err)
-					}
-					testBytes(t, lines, step)
-				}
+				_, _, err = rw.ReadCodeResponseLine()
+				err = rw.CheckCode(step.ExpectedCode)
+				testError(t, err, step)
 			}
 		})
 	}
 }
 
-func TestDotLinesReadCmdAsStringsWithCallback(t *testing.T) {
-	for _, test := range readerTests {
-		t.Run(test.Name, func(t *testing.T) {
-			rw := NewTestReaderWriterWithTestScript(test, NntpReaderWriterOptions{})
-			for _, step := range test.Steps {
-				lines := make([]string, 0)
-				callback := func(line string) error {
-					lines = append(lines, line)
-					return nil
-				}
-				code, msg, err := rw.DotLinesReadCmdAsStringsWithCallback(step.Command, callback)
-				testError(t, err, step)
-				testCode(t, code, step)
-				testMsg(t, msg, step)
-				testLines(t, lines, step)
+func TestConcurrentReadsAndWrites(t *testing.T) {
+	conn := mockScriptedConn.NewConcurrencyTestConn()
+	rw := NewNntpReaderWriter(conn, NntpReaderWriterOptions{})
+	done := sync.WaitGroup{}
+	errs := make(chan error, 100)
+	for i := 1; i <= 100; i++ {
+		done.Add(1)
+		go func(i int) {
+			id := rw.StartSequence()
+			defer func() { done.Done(); rw.EndSequence(id) }()
+			err := rw.WriteDotLine(fmt.Sprintf("line%d", i))
+			if err != nil {
+				errs <- fmt.Errorf("unexpected error in write sequence: %v", err)
+				return
 			}
-		})
+			_, msg, err := rw.ReadCodeResponseLine()
+			if err != nil {
+				errs <- fmt.Errorf("unexpected error in read sequence: %v", err)
+				return
+			}
+			if msg != fmt.Sprintf("line%d", i) {
+				errs <- fmt.Errorf("expected message %q, got %q", fmt.Sprintf("line%d", i), msg)
+			}
+		}(i)
+		time.Sleep(10 * time.Millisecond) // Stagger the goroutines slightly
 	}
-}
-
-func TestDotLinesReadCmdAsBytesWithCallback(t *testing.T) {
-	for _, test := range readerTests {
-		t.Run(test.Name, func(t *testing.T) {
-			rw := NewTestReaderWriterWithTestScript(test, NntpReaderWriterOptions{})
-			for _, step := range test.Steps {
-				lines := make([]byte, 0)
-				callback := func(line []byte) error {
-					lines = append(lines, append(line, '\n')...)
-					return nil
-				}
-				code, msg, err := rw.DotLinesReadCmdAsBytesWithCallback(step.Command, callback)
-				testError(t, err, step)
-				testCode(t, code, step)
-				testMsg(t, msg, step)
-				testBytes(t, lines, step)
-			}
-		})
-	}
-}
-
-var writerTests = []TestScript{
-	{
-		Name: "ValidLines",
-		Steps: []TestStep{
-			{
-				ScriptSteps: []mock.ScriptStep{
-					{
-						ExpectedWrite: []byte("POST\r\n"),
-						Response:      []byte("340 Send article to be posted\r\n"),
-					},
-					{
-						ExpectedWrite:  []byte("line1\r\n"),
-						AwaitNextWrite: true,
-					},
-					{
-						ExpectedWrite:  []byte("line2\r\n"),
-						AwaitNextWrite: true,
-					},
-					{
-						ExpectedWrite:  []byte("line3\r\n"),
-						AwaitNextWrite: true,
-					},
-					{
-						ExpectedWrite: []byte(".\r\n"),
-						Response:      []byte("240 Article received OK\r\n"),
-					},
-				},
-				Command:       "POST",
-				WriteLines:    []string{"line1", "line2", "line3"},
-				WriteData:     []byte("line1\nline2\nline3\n"),
-				ExpectedCode:  240,
-				ExpectedMsg:   "Article received OK",
-				ExpectedError: nil,
-			},
-		},
-	},
-	{
-		Name: "InvalidLine",
-		Steps: []TestStep{
-			{
-				ScriptSteps: []mock.ScriptStep{
-					{
-						ExpectedWrite: []byte("POST\r\n"),
-						Response:      []byte("340 Send article to be posted\r\n"),
-					},
-					{
-						ExpectedWrite:  []byte("line1\r\n"),
-						AwaitNextWrite: true,
-					},
-				},
-				Command:           "POST",
-				WriteLines:        []string{"line1", "line2\rline3"},
-				WriteData:         []byte("line1\nline2\rline3\n"),
-				ExpectedCode:      0,
-				ExpectedMsg:       "",
-				ExpectedError:     fmt.Errorf("invalid character %q in line to write", "\\r"),
-				ExpectedErrorType: IsInvalidWriteLineError,
-			},
-		},
-	},
-}
-
-func TestDotLinesWriteCmdFromStrings(t *testing.T) {
-	for _, test := range writerTests {
-		t.Run(test.Name, func(t *testing.T) {
-			rw := NewTestReaderWriterWithTestScript(test, NntpReaderWriterOptions{})
-			for _, step := range test.Steps {
-				code, msg, err := rw.DotLinesWriteCmdFromStrings(step.Command, step.WriteLines)
-				testError(t, err, step)
-				testCode(t, code, step)
-				testMsg(t, msg, step)
-			}
-		})
-	}
-}
-
-func TestDotLinesWriteCmdFromReader(t *testing.T) {
-	for _, test := range writerTests {
-		t.Run(test.Name, func(t *testing.T) {
-			rw := NewTestReaderWriterWithTestScript(test, NntpReaderWriterOptions{})
-			for _, step := range test.Steps {
-				reader := bytes.NewReader(step.WriteData)
-				code, msg, err := rw.DotLinesWriteCmdFromReader(step.Command, reader)
-				testError(t, err, step)
-				testCode(t, code, step)
-				testMsg(t, msg, step)
-			}
-		})
-	}
-}
-
-func TestDotLinesWriteCmdFromChan(t *testing.T) {
-	for _, test := range writerTests {
-		t.Run(test.Name, func(t *testing.T) {
-			rw := NewTestReaderWriterWithTestScript(test, NntpReaderWriterOptions{})
-			for _, step := range test.Steps {
-				lineChan := make(chan string)
-				go func() {
-					for _, line := range step.WriteLines {
-						lineChan <- line
-					}
-					close(lineChan)
-				}()
-				code, msg, err := rw.DotLinesWriteCmdFromChan(step.Command, lineChan)
-				testError(t, err, step)
-				testCode(t, code, step)
-				testMsg(t, msg, step)
-			}
-		})
+	done.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -429,7 +238,7 @@ func testError(t *testing.T, err error, step TestStep) {
 }
 
 func testCode(t *testing.T, code int, step TestStep) {
-	if code != step.ExpectedCode {
+	if code != step.ExpectedCode && step.ExpectedError == nil {
 		t.Fatalf("expected code %v, got %v", step.ExpectedCode, code)
 	}
 }

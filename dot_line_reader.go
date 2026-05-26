@@ -28,15 +28,13 @@ func (dlr *dotLineReader) Read(p []byte) (n int, err error) {
 		return 0, io.ErrClosedPipe
 	}
 	if len(dlr.pending) == 0 && dlr.err != nil {
-		err = dlr.err
-		dlr.err = nil
-		return 0, err
+		return 0, dlr.err
 	}
 	for n < len(p) {
 		if len(dlr.pending) == 0 {
-			line, readErr := dlr.rw.readDotLine()
-			if readErr != nil {
-				if readErr == io.EOF {
+			dlr.err = dlr.rw.readDotLineIntoLineBuffer()
+			if dlr.err != nil {
+				if dlr.err == io.EOF {
 					dlr.finish()
 					if n > 0 {
 						return n, nil
@@ -45,12 +43,11 @@ func (dlr *dotLineReader) Read(p []byte) (n int, err error) {
 				}
 				dlr.finish()
 				if n > 0 {
-					dlr.err = readErr
 					return n, nil
 				}
-				return 0, readErr
+				return 0, dlr.err
 			}
-			dlr.pending = append(line, '\n')
+			dlr.pending = append(dlr.rw.lineBuffer, '\n')
 		}
 		copied := copy(p[n:], dlr.pending)
 		n += copied
@@ -72,7 +69,7 @@ func (dlr *dotLineReader) Close() error {
 		return nil
 	}
 	for {
-		_, err := dlr.rw.readDotLine()
+		err := dlr.rw.readDotLineIntoLineBuffer()
 		if err == io.EOF {
 			dlr.finish()
 			return nil

@@ -1,132 +1,77 @@
 package nntpReaderWriter
 
 import (
-	"bufio"
 	"bytes"
 	"io"
-	"net/textproto"
 	"testing"
 
-	mockScriptedConn "github.com/Tensai75/nntpReaderWriter/testutils"
+	"github.com/Tensai75/nntpReaderWriter/mockScriptedConn"
 )
 
 const (
-	readLines   = 16384 //100000
-	readLineLen = 128   //1024
+	readLines   = 100000
+	readLineLen = 1024
 )
 
-func BenchmarkReadLinesAsReader(b *testing.B) {
+func BenchmarkReadLinesReader(b *testing.B) {
 	response := prepareReadBenchmark()
 	b.SetBytes(int64(readLines * readLineLen))
 	for b.Loop() {
+		b.StopTimer()
 		mock := mockScriptedConn.NewScriptedConn([]mockScriptedConn.ScriptStep{
 			{ExpectedWrite: []byte("OVER 1-100000\r\n"), Response: response},
 		})
 		client := NewNntpReaderWriter(mock, NntpReaderWriterOptions{})
-		code, msg, r, err := client.DotLinesReadCmdAsReader("OVER 1-100000")
-		if err != nil || code != 224 {
-			b.Fatalf("unexpected: code=%d msg=%q err=%v", code, msg, err)
+		err := client.WriteLine("OVER 1-100000")
+		if err != nil {
+			b.Fatalf("unexpected error writing command: %v", err)
+		}
+		_, _, err = client.ReadCodeResponseLine()
+		if err != nil {
+			b.Fatalf("unexpected error reading code line: err=%v", err)
+		}
+		b.StartTimer()
+		r, err := client.ReadDotLinesReader(nil)
+		if err != nil {
+			b.Fatalf("unexpected error getting dot lines reader: %v", err)
 		}
 		_, err = io.Copy(io.Discard, r)
 		if err != nil {
 			b.Fatalf("io.Copy error: %v", err)
 		}
-		r.Close()
 	}
 }
 
-func BenchmarkReadLinesAsReader_Textproto(b *testing.B) {
+func BenchmarkReadLinesStrings(b *testing.B) {
 	response := prepareReadBenchmark()
 	b.SetBytes(int64(readLines * readLineLen))
 	for b.Loop() {
-		mock := mockScriptedConn.NewScriptedConn([]mockScriptedConn.ScriptStep{
-			{ExpectedWrite: []byte("OVER 1-100000\r\n"), Response: response},
-		})
-		tr := textproto.NewReader(bufio.NewReaderSize(mock, 16*1024))
-		// Write the OVER command (simulate client send)
-		_, _ = mock.Write([]byte("OVER 1-100000\r\n"))
-		// Read the status line
-		code, msg, err := tr.ReadCodeLine(224)
-		if err != nil && code != 224 {
-			b.Fatalf("unexpected: code=%d msg=%q err=%v", code, msg, err)
-		}
-		if err != nil {
-			b.Fatalf("ReadLine error: %v", err)
-		}
-		// Read dot-encoded lines using DotReader and copy to io.Discard
-		dr := tr.DotReader()
-		_, err = io.Copy(io.Discard, dr)
-		if err != nil {
-			b.Fatalf("io.Copy error: %v", err)
-		}
-	}
-}
-
-func BenchmarkReadLinesAsStrings(b *testing.B) {
-	response := prepareReadBenchmark()
-	b.SetBytes(int64(readLines * readLineLen))
-	for b.Loop() {
+		b.StopTimer()
 		mock := mockScriptedConn.NewScriptedConn([]mockScriptedConn.ScriptStep{
 			{ExpectedWrite: []byte("OVER 1-100000\r\n"), Response: response},
 		})
 		client := NewNntpReaderWriter(mock, NntpReaderWriterOptions{})
-		code, msg, _, err := client.DotLinesReadCmdAsStrings("OVER 1-100000")
-		if err != nil || code != 224 {
-			b.Fatalf("unexpected: code=%d msg=%q err=%v", code, msg, err)
-		}
-	}
-}
-
-func BenchmarkReadLinesAsStrings_Textproto(b *testing.B) {
-	response := prepareReadBenchmark()
-	b.SetBytes(int64(readLines * readLineLen))
-	for b.Loop() {
-		mock := mockScriptedConn.NewScriptedConn([]mockScriptedConn.ScriptStep{
-			{ExpectedWrite: []byte("OVER 1-100000\r\n"), Response: response},
-		})
-		tr := textproto.NewReader(bufio.NewReader(mock))
-		// Write the OVER command (simulate client send)
-		_, _ = mock.Write([]byte("OVER 1-100000\r\n"))
-		// Read the status line
-		code, msg, err := tr.ReadCodeLine(224)
-		if err != nil && code != 224 {
-			b.Fatalf("unexpected: code=%d msg=%q err=%v", code, msg, err)
-		}
+		err := client.WriteLine("OVER 1-100000")
 		if err != nil {
-			b.Fatalf("ReadLine error: %v", err)
+			b.Fatalf("unexpected error writing command: %v", err)
 		}
-		// Read dot-encoded lines using DotReader and copy to io.Discard
-		_, err = tr.ReadDotLines()
+		_, _, err = client.ReadCodeResponseLine()
 		if err != nil {
-			b.Fatalf("io.Copy error: %v", err)
+			b.Fatalf("unexpected error reading code line: err=%v", err)
+		}
+		b.StartTimer()
+		_, err = client.ReadDotLines()
+		if err != nil {
+			b.Fatalf("unexpected error reading dot lines as strings: %v", err)
 		}
 	}
 }
 
-func BenchmarkReadLinesAsBytesWithCallback(b *testing.B) {
+func BenchmarkReadLinesCallback(b *testing.B) {
 	response := prepareReadBenchmark()
 	b.SetBytes(int64(readLines * readLineLen))
 	for b.Loop() {
-		mock := mockScriptedConn.NewScriptedConn([]mockScriptedConn.ScriptStep{
-			{ExpectedWrite: []byte("OVER 1-100000\r\n"), Response: response},
-		})
-		client := NewNntpReaderWriter(mock, NntpReaderWriterOptions{})
-		callback := func(line []byte) error {
-			// In a real use case, you might process the line here.
-			// For benchmarking, we just discard it.
-			return nil
-		}
-		code, msg, err := client.DotLinesReadCmdAsBytesWithCallback("OVER 1-100000", callback)
-		if err != nil || code != 224 {
-			b.Fatalf("unexpected: code=%d msg=%q err=%v", code, msg, err)
-		}
-	}
-}
-
-func BenchmarkReadLinesAsStringsWithCallback(b *testing.B) {
-	response := prepareReadBenchmark()
-	b.SetBytes(int64(readLines * readLineLen))
-	for b.Loop() {
+		b.StopTimer()
 		mock := mockScriptedConn.NewScriptedConn([]mockScriptedConn.ScriptStep{
 			{ExpectedWrite: []byte("OVER 1-100000\r\n"), Response: response},
 		})
@@ -136,9 +81,48 @@ func BenchmarkReadLinesAsStringsWithCallback(b *testing.B) {
 			// For benchmarking, we just discard it.
 			return nil
 		}
-		code, msg, err := client.DotLinesReadCmdAsStringsWithCallback("OVER 1-100000", callback)
-		if err != nil || code != 224 {
-			b.Fatalf("unexpected: code=%d msg=%q err=%v", code, msg, err)
+		err := client.WriteLine("OVER 1-100000")
+		if err != nil {
+			b.Fatalf("unexpected error writing command: %v", err)
+		}
+		_, _, err = client.ReadCodeResponseLine()
+		if err != nil {
+			b.Fatalf("unexpected error reading code line: err=%v", err)
+		}
+		b.StartTimer()
+		err = client.ReadDotLinesCallback(callback)
+		if err != nil {
+			b.Fatalf("unexpected error reading dot lines with callback: %v", err)
+		}
+	}
+}
+
+func BenchmarkReadLinesCallbackBytes(b *testing.B) {
+	response := prepareReadBenchmark()
+	b.SetBytes(int64(readLines * readLineLen))
+	for b.Loop() {
+		b.StopTimer()
+		mock := mockScriptedConn.NewScriptedConn([]mockScriptedConn.ScriptStep{
+			{ExpectedWrite: []byte("OVER 1-100000\r\n"), Response: response},
+		})
+		client := NewNntpReaderWriter(mock, NntpReaderWriterOptions{})
+		callback := func(line []byte) error {
+			// In a real use case, you might process the line here.
+			// For benchmarking, we just discard it.
+			return nil
+		}
+		err := client.WriteLine("OVER 1-100000")
+		if err != nil {
+			b.Fatalf("unexpected error writing command: %v", err)
+		}
+		_, _, err = client.ReadCodeResponseLine()
+		if err != nil {
+			b.Fatalf("unexpected error reading code line: err=%v", err)
+		}
+		b.StartTimer()
+		err = client.ReadDotLinesCallbackBytes(callback)
+		if err != nil {
+			b.Fatalf("unexpected error reading dot lines with callback: %v", err)
 		}
 	}
 }

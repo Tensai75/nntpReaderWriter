@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	mock "github.com/Tensai75/nntpReaderWriter/testutils"
+	"github.com/Tensai75/nntpReaderWriter/mockScriptedConn"
 )
 
 var readDotLineTests = []TestScript{
@@ -13,7 +13,7 @@ var readDotLineTests = []TestScript{
 		Name: "Basic",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte("hello world\r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte("hello world\r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedBytes: []byte("hello world"),
 				ExpectedError: nil,
@@ -24,7 +24,7 @@ var readDotLineTests = []TestScript{
 		Name: "UTF-8",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte("こんにちは世界\r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte("こんにちは世界\r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedBytes: []byte("こんにちは世界"),
 				ExpectedError: nil,
@@ -35,7 +35,7 @@ var readDotLineTests = []TestScript{
 		Name: "VeryLongLine",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte(strings.Repeat("a", 70*1024) + "\r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte(strings.Repeat("a", 70*1024) + "\r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedBytes: []byte(strings.Repeat("a", 70*1024)),
 				ExpectedError: nil,
@@ -46,7 +46,7 @@ var readDotLineTests = []TestScript{
 		Name: "EmptyLine",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte("\r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte("\r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedBytes: []byte(""),
 				ExpectedError: nil,
@@ -57,7 +57,7 @@ var readDotLineTests = []TestScript{
 		Name: "TwoDotsToOne",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte("..\r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte("..\r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedBytes: []byte("."),
 				ExpectedError: nil,
@@ -68,7 +68,7 @@ var readDotLineTests = []TestScript{
 		Name: "DotStuffed",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte("..hello\r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte("..hello\r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedBytes: []byte(".hello"),
 				ExpectedError: nil,
@@ -79,7 +79,7 @@ var readDotLineTests = []TestScript{
 		Name: "DotStuffedThree",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte("...hello\r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte("...hello\r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedBytes: []byte("..hello"),
 				ExpectedError: nil,
@@ -91,7 +91,7 @@ var readDotLineTests = []TestScript{
 		Name: "CRNoLF",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte("foo\r.\r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte("foo\r.\r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedBytes: []byte("foo\r."),
 				ExpectedError: nil,
@@ -103,7 +103,7 @@ var readDotLineTests = []TestScript{
 		Name: "MultipleCR",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte("foo\r\r\r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte("foo\r\r\r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedBytes: []byte("foo\r\r"),
 				ExpectedError: nil,
@@ -114,7 +114,7 @@ var readDotLineTests = []TestScript{
 		Name: "DotInMiddle",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte("foo.bar.baz\r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte("foo.bar.baz\r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedBytes: []byte("foo.bar.baz"),
 				ExpectedError: nil,
@@ -125,7 +125,7 @@ var readDotLineTests = []TestScript{
 		Name: "WhitespaceOnly",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte("   \t  \r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte("   \t  \r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedBytes: []byte("   \t  "),
 				ExpectedError: nil,
@@ -136,7 +136,7 @@ var readDotLineTests = []TestScript{
 		Name: "SingleDotEOF",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte(".\r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte(".\r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedBytes: []byte(""),
 				ExpectedError: io.EOF,
@@ -151,9 +151,9 @@ func TestReadDotLine(t *testing.T) {
 			rw := NewTestReaderWriterWithTestScript(test, NntpReaderWriterOptions{})
 			for _, step := range test.Steps {
 				rw.writeBytes(step.WriteData)
-				line, err := rw.readDotLine()
+				err := rw.readDotLineIntoLineBuffer()
 				testError(t, err, step)
-				testBytes(t, line, step)
+				testBytes(t, rw.lineBuffer, step)
 			}
 		})
 	}
@@ -175,7 +175,7 @@ func TestReadDotLines(t *testing.T) {
 	}
 	testSteps := []TestStep{
 		{
-			ScriptSteps:   []mock.ScriptStep{{Response: response}},
+			ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: response}},
 			WriteData:     []byte("\r\n"),
 			ExpectedLines: expectedLines,
 			ExpectedBytes: expectedBytes,
@@ -191,7 +191,7 @@ func TestReadDotLines(t *testing.T) {
 		rw := NewTestReaderWriterWithTestScript(testScriptAsStrings, NntpReaderWriterOptions{})
 		for _, step := range testScriptAsStrings.Steps {
 			rw.writeBytes(step.WriteData)
-			lines, err := rw.readDotLinesAsStrings()
+			lines, err := rw.ReadDotLines()
 			testError(t, err, step)
 			testLines(t, lines, step)
 		}
@@ -205,7 +205,7 @@ func TestReadDotLines(t *testing.T) {
 		rw := NewTestReaderWriterWithTestScript(testScriptAsReader, NntpReaderWriterOptions{})
 		for _, step := range testScriptAsReader.Steps {
 			rw.writeBytes(step.WriteData)
-			linesReader, err := rw.readDotLinesAsReader(func() {})
+			linesReader, err := rw.ReadDotLinesReader(func() {})
 			testError(t, err, step)
 			lines, err := io.ReadAll(linesReader)
 			if err != nil {
@@ -228,7 +228,7 @@ func TestReadDotLines(t *testing.T) {
 				bytes = append(bytes, append(line, '\n')...)
 				return nil
 			}
-			err := rw.readDotLinesAsBytesWithCallback(callback)
+			err := rw.ReadDotLinesCallbackBytes(callback)
 			testError(t, err, step)
 			testBytes(t, bytes, step)
 
@@ -248,7 +248,7 @@ func TestReadDotLines(t *testing.T) {
 				lines = append(lines, line)
 				return nil
 			}
-			err := rw.readDotLinesAsStringsWithCallback(callback)
+			err := rw.ReadDotLinesCallback(callback)
 			testError(t, err, step)
 			testLines(t, lines, step)
 		}
@@ -261,7 +261,7 @@ var readCodeResponseLineTests = []TestScript{
 		Name: "Basic",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte("200 Hello\r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte("200 Hello\r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedCode:  200,
 				ExpectedMsg:   "Hello",
@@ -273,7 +273,7 @@ var readCodeResponseLineTests = []TestScript{
 		Name: "UTF-8",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte("200 こんにちは\r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte("200 こんにちは\r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedCode:  200,
 				ExpectedMsg:   "こんにちは",
@@ -285,7 +285,7 @@ var readCodeResponseLineTests = []TestScript{
 		Name: "NoMessage",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte("200\r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte("200\r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedCode:  200,
 				ExpectedMsg:   "",
@@ -297,7 +297,7 @@ var readCodeResponseLineTests = []TestScript{
 		Name: "InvalidCode",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte("abc Invalid\r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte("abc Invalid\r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedCode:  0,
 				ExpectedMsg:   "",
@@ -309,7 +309,7 @@ var readCodeResponseLineTests = []TestScript{
 		Name: "ShortLine",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte("20\r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte("20\r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedCode:  0,
 				ExpectedMsg:   "",
@@ -321,7 +321,7 @@ var readCodeResponseLineTests = []TestScript{
 		Name: "WhitespaceInMessage",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte("200    Hello World   \r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte("200    Hello World   \r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedCode:  200,
 				ExpectedMsg:   "   Hello World   ",
@@ -333,7 +333,7 @@ var readCodeResponseLineTests = []TestScript{
 		Name: "NonStandardCode",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte("599 Custom Code\r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte("599 Custom Code\r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedCode:  599,
 				ExpectedMsg:   "Custom Code",
@@ -345,7 +345,7 @@ var readCodeResponseLineTests = []TestScript{
 		Name: "CodeWithLeadingZeros",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte("020 Hello\r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte("020 Hello\r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedCode:  20,
 				ExpectedMsg:   "Hello",
@@ -357,7 +357,7 @@ var readCodeResponseLineTests = []TestScript{
 		Name: "CodeWithTrailingWhitespace",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte("200 Hello   \r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte("200 Hello   \r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedCode:  200,
 				ExpectedMsg:   "Hello   ",
@@ -369,7 +369,7 @@ var readCodeResponseLineTests = []TestScript{
 		Name: "CodeWithLeadingWhitespace",
 		Steps: []TestStep{
 			{
-				ScriptSteps:   []mock.ScriptStep{{Response: []byte(" 200 Hello\r\n")}},
+				ScriptSteps:   []mockScriptedConn.ScriptStep{{Response: []byte(" 200 Hello\r\n")}},
 				WriteData:     []byte("\r\n"),
 				ExpectedCode:  0,
 				ExpectedMsg:   "",
@@ -385,7 +385,7 @@ func TestReadCodeResponseLine(t *testing.T) {
 			rw := NewTestReaderWriterWithTestScript(test, NntpReaderWriterOptions{})
 			for _, step := range test.Steps {
 				rw.writeBytes(step.WriteData)
-				code, msg, err := rw.readCodeResponseLine()
+				code, msg, err := rw.ReadCodeResponseLine()
 				testError(t, err, step)
 				testCode(t, code, step)
 				testMsg(t, msg, step)

@@ -2,110 +2,104 @@ package nntpReaderWriter
 
 import (
 	"io"
-	"time"
 )
 
-func (rw *NntpReaderWriter) readCodeResponseLine() (code int, msg string, err error) {
-	line, err := rw.readRawLine()
+// ReadCodeResponseLine reads a single-line response and parses the response code and message. It returns an error if the line is not a valid response line.
+func (rw *NntpReaderWriter) ReadCodeResponseLine() (code int, msg string, err error) {
+	rw.lineReader.Reset()
+	rw.lineBuffer, err = rw.lineReader.ReadLineUnbuffered()
 	if err != nil {
 		return
 	}
-	if len(line) < 3 {
+	if len(rw.lineBuffer) < 3 {
 		err = errInvalidResponseLine()
 		return
 	}
-	b0, b1, b2 := line[0], line[1], line[2]
+	b0, b1, b2 := rw.lineBuffer[0], rw.lineBuffer[1], rw.lineBuffer[2]
 	if b0 < '0' || b0 > '9' || b1 < '0' || b1 > '9' || b2 < '0' || b2 > '9' {
 		err = errInvalidResponseLine()
 		return
 	}
-	code = int(b0-'0')*100 + int(b1-'0')*10 + int(b2-'0')
-	if len(line) > 4 {
-		msg = string(line[4:])
+	rw.code = int(b0-'0')*100 + int(b1-'0')*10 + int(b2-'0')
+	if len(rw.lineBuffer) > 4 {
+		rw.msg = string(rw.lineBuffer[4:])
 	}
-	return
+	return rw.code, rw.msg, nil
 }
 
-func (rw *NntpReaderWriter) readDotLinesAsStrings() (lines []string, err error) {
-	var line []byte
+// ReadDotLines reads dot-encoded lines and returns them as a slice of strings.
+func (rw *NntpReaderWriter) ReadDotLines() (lines []string, err error) {
+	rw.lineReader.Reset()
 	for {
-		line, err = rw.readDotLine()
+		err = rw.readDotLineIntoLineBuffer()
 		if err != nil {
 			if err == io.EOF {
 				err = nil
 			}
 			return
 		}
-		lines = append(lines, string(line))
+		lines = append(lines, string(rw.lineBuffer))
 	}
 }
 
-func (rw *NntpReaderWriter) readDotLinesAsReader(done func()) (io.ReadCloser, error) {
+// ReadDotLinesReader returns an io.ReadCloser that can be used to read dot-encoded lines.
+// The caller should provide the EndSequence function as the done callback or make sure to call it when finished reading.
+func (rw *NntpReaderWriter) ReadDotLinesReader(done func()) (io.ReadCloser, error) {
+	rw.lineReader.Reset()
 	return &dotLineReader{
 		rw:   rw,
 		done: done,
 	}, nil
 }
 
-func (rw *NntpReaderWriter) readDotLinesAsBytesWithCallback(callback func([]byte) error) error {
-	var line []byte
-	var err error
+// ReadDotLinesCallback reads dot-encoded lines and invokes the callback for each line as a string.
+func (rw *NntpReaderWriter) ReadDotLinesCallback(callback func(string) error) (err error) {
+	rw.lineReader.Reset()
 	for {
-		line, err = rw.readDotLine()
+		err = rw.readDotLineIntoLineBuffer()
 		if err != nil {
 			if err == io.EOF {
 				err = nil
 			}
 			return err
 		}
-		if line != nil {
-			if err := callback(line); err != nil {
-				return err
-			}
+		if err := callback(string(rw.lineBuffer)); err != nil {
+			return err
 		}
 	}
 }
 
-func (rw *NntpReaderWriter) readDotLinesAsStringsWithCallback(callback func(string) error) error {
-	var line []byte
-	var err error
+// ReadDotLinesCallbackBytes reads dot-encoded lines and invokes the callback for each line as bytes.
+func (rw *NntpReaderWriter) ReadDotLinesCallbackBytes(callback func([]byte) error) (err error) {
+	rw.lineReader.Reset()
 	for {
-		line, err = rw.readDotLine()
+		err = rw.readDotLineIntoLineBuffer()
 		if err != nil {
 			if err == io.EOF {
 				err = nil
 			}
 			return err
 		}
-		if line != nil {
-			if err := callback(string(line)); err != nil {
-				return err
-			}
+		if err := callback(rw.lineBuffer); err != nil {
+			return err
 		}
 	}
 }
 
-func (rw *NntpReaderWriter) readDotLine() (line []byte, err error) {
-	line, err = rw.readRawLine()
+// readDotLineIntoLineBuffer reads a single dot-encoded line into the line buffer.
+// It returns io.EOF when the end of the dot-encoded block is reached.
+func (rw *NntpReaderWriter) readDotLineIntoLineBuffer() (err error) {
+	rw.lineBuffer = rw.lineBuffer[:0]
+	rw.lineBuffer, err = rw.lineReader.ReadLineBuffered()
 	if err != nil {
 		return
 	}
-	if len(line) == 1 && line[0] == '.' {
-		return nil, io.EOF
+	if len(rw.lineBuffer) == 1 && rw.lineBuffer[0] == '.' {
+		rw.lineBuffer = rw.lineBuffer[:0]
+		return io.EOF
 	}
-	if len(line) >= 2 && line[0] == '.' && line[1] == '.' {
-		line = line[1:]
+	if len(rw.lineBuffer) >= 2 && rw.lineBuffer[0] == '.' && rw.lineBuffer[1] == '.' {
+		rw.lineBuffer = rw.lineBuffer[1:]
 	}
 	return
-}
-
-func (rw *NntpReaderWriter) readRawLine() ([]byte, error) {
-	return rw.lineScanner.ScanLine(rw.readBytes())
-}
-
-func (rw *NntpReaderWriter) readBytes() io.Reader {
-	if rw.readTimeout > 0 {
-		rw.conn.SetReadDeadline(time.Now().Add(rw.readTimeout))
-	}
-	return rw.conn
 }
